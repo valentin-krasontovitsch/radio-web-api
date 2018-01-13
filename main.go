@@ -13,8 +13,10 @@ func runCmdAndServe(c *gin.Context, cmd *exec.Cmd) {
 	cmd.Stdout = &out
 	err := cmd.Run()
 	if err != nil {
-		c.JSON(503, gin.H{"error": err})
+		log.Println(err)
+		c.JSON(500, gin.H{"error": err})
 	} else {
+		log.Println(out.String())
 		c.JSON(200, gin.H{"output": out.String()})
 	}
 }
@@ -39,13 +41,14 @@ func main() {
 		var out bytes.Buffer
 		cmd.Stdout = &out
 		err := cmd.Run()
-		log.Println(out.String())
-		log.Println(err)
 		if err != nil {
-			c.JSON(200, gin.H{"connected": "false"})
-		} else {
-			c.JSON(200, gin.H{"connected": "true"})
+			log.Println(err)
+			c.JSON(200, gin.H{"connected": false})
+			return
 		}
+		log.Println(out.String())
+		c.JSON(200, gin.H{"connected": true})
 	})
+
 	r.Run() // listen and serve on 0.0.0.0:PORT
 }
