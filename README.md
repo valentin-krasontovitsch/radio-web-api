@@ -12,9 +12,15 @@ functionality / behavior.
 
 ## Endpoints
 
+All endpoints return 200 on OK, 500 on internal errors and 400 on bad request.
+We try to be verbose when something goes wrong. We expect and return JSON, and
+put error messages in a field with key `error`.
+
 - `/connect` (GET) - attempts to connect to the speakers
-- `/connected` (GET) - returns whether we are connected, or not
-- `/volume` (GET,PUT) - gets / sets volume *TODO*
+- `/connected` (GET) - returns whether we are connected, or not, as
+  `{"connected": true}` where the latter is a boolean
+- `/volume` (GET,PUT) - gets / sets volume, returns and expects JSON of the
+  form `{"volume": 34}` where the number should be between 0 and 100
 
 ## Configuration
 
