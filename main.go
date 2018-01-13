@@ -32,7 +32,6 @@ func main() {
 
 	r.GET("/connect", func(c *gin.Context) {
 		cmd := exec.Command(binPath + "/connect.sh")
-		cmd.Env = append(os.Environ(), "CONNECT_TRIALS=2")
 		runCmdAndServe(c, cmd)
 	})
 
