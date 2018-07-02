@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"log"
 	"os"
@@ -36,7 +37,9 @@ func main() {
 	binPath := "/home/val/code/blue-radio-shell"
 	log.Println(binPath)
 
-	r.GET("/connect", func(c *gin.Context) {
+	router.Use(cors.Default())
+
+	router.GET("/connect", func(c *gin.Context) {
 		cmd := exec.Command(binPath + "/connect.sh")
 		runCmdAndServe(c, cmd)
 	})
