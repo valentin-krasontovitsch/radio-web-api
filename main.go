@@ -8,9 +8,18 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 )
+
+func isCommandAvailable(name string) bool {
+	cmd := exec.Command("/bin/sh", "-c", "command -v "+name)
+	if err := cmd.Run(); err != nil {
+		return false
+	}
+	return true
+}
 
 type Volume struct {
 	Value int `json:"volume"`
@@ -34,22 +43,41 @@ func runCmdAndServe(c *gin.Context, cmd *exec.Cmd) {
 
 func main() {
 	router := gin.Default()
-	speaker := os.Getenv("SPEAKER_ADDRESS")
-	log.Println("Speaker: " + speaker)
-
-	// TODO read from environment
-	binPath := "/home/val/code/blue-radio-shell"
-	log.Println(binPath)
-
 	router.Use(cors.Default())
 
+	// get speaker address
+	speaker := os.Getenv("SPEAKER_ADDRESS")
+	macRegexp := "^([0-9A-Fa-f]{2}[:-]?){5}([0-9A-Fa-f]{2})$"
+	isMacAddress, err := regexp.MatchString(macRegexp, speaker)
+	if err != nil {
+		log.Fatalf("Failed to check SPEAKER_ADDRESS: %s for mac address", speaker)
+	} else if !isMacAddress {
+		log.Fatalf("SPEAKER_ADDRESS: %s did not parse as a mac address", speaker)
+	}
+	log.Println("Speaker: " + speaker)
+
+	// check for binaries
+	binaries := []string{
+		"connect.sh",
+		"connected.sh",
+		"set_volume_t5.sh",
+		"get_volume_t5.sh",
+	}
+
+	for _, binary := range binaries {
+		if !isCommandAvailable(binary) {
+			log.Fatalf("Binary %s could not be found", binary)
+		}
+	}
+
+	// set routes
 	router.GET("/connect", func(c *gin.Context) {
-		cmd := exec.Command(binPath + "/connect.sh")
+		cmd := exec.Command("connect.sh")
 		runCmdAndServe(c, cmd)
 	})
 
 	router.GET("/connected", func(c *gin.Context) {
-		cmd := exec.Command(binPath + "/connected.sh")
+		cmd := exec.Command("connected.sh")
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
 		cmd.Stdout = &stdout
@@ -66,7 +94,7 @@ func main() {
 	})
 
 	router.GET("/volume", func(c *gin.Context) {
-		cmd := exec.Command(binPath + "/get_volume_t5.sh")
+		cmd := exec.Command("get_volume_t5.sh")
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
 		cmd.Stdout = &stdout
@@ -101,7 +129,7 @@ func main() {
 				" 0 and 100", "data": volume})
 			return
 		}
-		cmd := exec.Command(binPath+"/set_volume_t5.sh",
+		cmd := exec.Command("set_volume_t5.sh",
 			strconv.Itoa(volume.Value)+"%")
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
