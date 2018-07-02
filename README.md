@@ -24,7 +24,8 @@ put error messages in a field with key `error`.
 
 ## Configuration
 
-- `PORT` specifies where to serve
+- `PORT` which port the web api will listen on
+* `SPEAKER_ADDRESS` MAC address of speaker
 
 ## Implementation
 
