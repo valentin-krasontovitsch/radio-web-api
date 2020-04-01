@@ -56,6 +56,11 @@ func main() {
 	}
 	log.Println("Speaker: " + speaker)
 
+	binPath := os.Getenv("RWA_BIN_PATH")
+	if binPath == "" {
+		binPath = "/home/val/code/blue-radio-shell"
+	}
+
 	// check for binaries
 	binaries := []string{
 		"connect.sh",
@@ -70,14 +75,13 @@ func main() {
 		}
 	}
 
-	// set routes
 	router.GET("/connect", func(c *gin.Context) {
-		cmd := exec.Command("connect.sh")
+		cmd := exec.Command(binPath + "/connect.sh")
 		runCmdAndServe(c, cmd)
 	})
 
 	router.GET("/connected", func(c *gin.Context) {
-		cmd := exec.Command("connected.sh")
+		cmd := exec.Command(binPath + "/connected.sh")
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
 		cmd.Stdout = &stdout
@@ -94,7 +98,7 @@ func main() {
 	})
 
 	router.GET("/volume", func(c *gin.Context) {
-		cmd := exec.Command("get_volume_t5.sh")
+		cmd := exec.Command(binPath + "/get_volume_t5.sh")
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
 		cmd.Stdout = &stdout
