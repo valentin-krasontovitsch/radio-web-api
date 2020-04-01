@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"fmt"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"log"
 	"os"
@@ -15,20 +17,23 @@ type Volume struct {
 }
 
 func runCmdAndServe(c *gin.Context, cmd *exec.Cmd) {
-	var out bytes.Buffer
-	cmd.Stdout = &out
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 	err := cmd.Run()
 	if err != nil {
-		log.Println(err)
-		c.JSON(500, gin.H{"error": err})
+		errMsg := fmt.Sprint(err) + " - " + stderr.String()
+		log.Println(errMsg)
+		c.JSON(500, gin.H{"error": errMsg})
 	} else {
-		log.Println(out.String())
-		c.JSON(200, gin.H{"output": out.String()})
+		log.Println(stdout.String())
+		c.JSON(200, gin.H{"output": stdout.String()})
 	}
 }
 
 func main() {
-	r := gin.Default()
+	router := gin.Default()
 	speaker := os.Getenv("SPEAKER_ADDRESS")
 	log.Println("Speaker: " + speaker)
 
@@ -36,36 +41,44 @@ func main() {
 	binPath := "/home/val/code/blue-radio-shell"
 	log.Println(binPath)
 
-	r.GET("/connect", func(c *gin.Context) {
+	router.Use(cors.Default())
+
+	router.GET("/connect", func(c *gin.Context) {
 		cmd := exec.Command(binPath + "/connect.sh")
 		runCmdAndServe(c, cmd)
 	})
 
-	r.GET("/connected", func(c *gin.Context) {
+	router.GET("/connected", func(c *gin.Context) {
 		cmd := exec.Command(binPath + "/connected.sh")
-		var out bytes.Buffer
-		cmd.Stdout = &out
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
 		err := cmd.Run()
 		if err != nil {
-			log.Println(err)
+			errMsg := fmt.Sprint(err) + " - " + stderr.String()
+			log.Println(errMsg)
 			c.JSON(200, gin.H{"connected": false})
 			return
 		}
-		log.Println(out.String())
+		log.Println(stdout.String())
 		c.JSON(200, gin.H{"connected": true})
 	})
 
-	r.GET("/volume", func(c *gin.Context) {
+	router.GET("/volume", func(c *gin.Context) {
 		cmd := exec.Command(binPath + "/get_volume_t5.sh")
-		var out bytes.Buffer
-		cmd.Stdout = &out
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
 		err := cmd.Run()
 		if err != nil {
-			log.Println(err)
-			c.JSON(500, gin.H{"error": "Error running command: " + err.Error()})
+			errMsg := fmt.Sprint(err) + " - " + stderr.String()
+			log.Println(errMsg)
+			c.JSON(500, gin.H{"error": errMsg})
 			return
 		}
-		volume, convErr := strconv.Atoi(strings.TrimSpace(out.String()))
+		volume, convErr := strconv.Atoi(strings.TrimSpace(stdout.String()))
 		if convErr != nil {
 			log.Println(convErr)
 			c.JSON(500, gin.H{"error": convErr})
@@ -75,7 +88,7 @@ func main() {
 		c.JSON(200, gin.H{"volume": volume})
 	})
 
-	r.PUT("/volume", func(c *gin.Context) {
+	router.PUT("/volume", func(c *gin.Context) {
 		volume := new(Volume)
 		jsonErr := c.BindJSON(volume)
 		log.Println(volume)
@@ -90,14 +103,19 @@ func main() {
 		}
 		cmd := exec.Command(binPath+"/set_volume_t5.sh",
 			strconv.Itoa(volume.Value)+"%")
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
 		err := cmd.Run()
 		if err != nil {
-			log.Println(err)
-			c.JSON(500, gin.H{"error": err})
+			errMsg := fmt.Sprint(err) + " - " + stderr.String()
+			log.Println(errMsg)
+			c.JSON(500, gin.H{"error": errMsg})
 			return
 		}
 		c.JSON(200, gin.H{})
 	})
 
-	r.Run() // listen and serve on 0.0.0.0:PORT
+	router.Run() // listen and serve on 0.0.0.0:PORT
 }
