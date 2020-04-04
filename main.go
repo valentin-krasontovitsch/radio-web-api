@@ -47,6 +47,9 @@ func main() {
 
 	// get speaker address
 	speaker := os.Getenv("SPEAKER_ADDRESS")
+	if speaker == "" {
+		speaker = "40:EF:4C:1D:37:F0"
+	}
 	macRegexp := "^([0-9A-Fa-f]{2}[:-]?){5}([0-9A-Fa-f]{2})$"
 	isMacAddress, err := regexp.MatchString(macRegexp, speaker)
 	if err != nil {
@@ -58,7 +61,7 @@ func main() {
 
 	binPath := os.Getenv("RWA_BIN_PATH")
 	if binPath == "" {
-		binPath = "/home/val/code/blue-radio-shell"
+		binPath = "/usr/local/bin"
 	}
 
 	// check for binaries
