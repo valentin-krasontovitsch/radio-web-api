@@ -70,6 +70,8 @@ func main() {
 		"connected.sh",
 		"set_volume_t5.sh",
 		"get_volume_t5.sh",
+		"kill_radio.sh",
+		"radio.sh",
 	}
 
 	for _, binary := range binaries {
