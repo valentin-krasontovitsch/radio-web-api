@@ -85,6 +85,11 @@ func main() {
 		runCmdAndServe(c, cmd)
 	})
 
+	router.GET("/kill", func(c *gin.Context) {
+		cmd := exec.Command(binPath + "/kill_radio.sh")
+		runCmdAndServe(c, cmd)
+	})
+
 	router.GET("/connected", func(c *gin.Context) {
 		cmd := exec.Command(binPath + "/connected.sh")
 		var stdout bytes.Buffer
