@@ -6,12 +6,36 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
 )
+
+var (
+	stations map[string]string
+	binaries []string
+)
+
+func init() {
+	binaries = []string{
+		"connect.sh",
+		"connected.sh",
+		"set_volume_t5.sh",
+		"get_volume_t5.sh",
+		"kill_radio.sh",
+		"radio.sh",
+	}
+	stations = make(map[string]string)
+	stations["BBC2"] = "http://bbcmedia.ic.llnwd.net/stream/bbcmedia_radio2_mf_p"
+	stations["WDR2"] = "https://wdr-wdr2-rheinruhr.sslcast.addradio.de/wdr/wdr2/rheinruhr/mp3/128/stream.mp3"
+	stations["NRK-P1"] = "http://lyd.nrk.no/nrk_radio_p1_hordaland_mp3_h"
+	stations["NRK-P3"] = "http://lyd.nrk.no/nrk_radio_p3_mp3_h"
+	stations["RADIO-NORGE"] = "http://live-bauerno.sharp-stream.com/radionorge_no_mp3"
+	stations["xmas"] = "http://live-bauerno.sharp-stream.com/station17_no_hq"
+}
 
 func isCommandAvailable(name string) bool {
 	cmd := exec.Command("/bin/sh", "-c", "command -v "+name)
@@ -37,7 +61,7 @@ func runCmdAndServe(c *gin.Context, cmd *exec.Cmd) {
 		c.JSON(500, gin.H{"error": errMsg})
 	} else {
 		log.Println(stdout.String())
-		c.JSON(200, gin.H{"output": stdout.String()})
+		c.JSON(http.StatusOK, gin.H{"output": stdout.String()})
 	}
 }
 
@@ -65,15 +89,6 @@ func main() {
 	}
 
 	// check for binaries
-	binaries := []string{
-		"connect.sh",
-		"connected.sh",
-		"set_volume_t5.sh",
-		"get_volume_t5.sh",
-		"kill_radio.sh",
-		"radio.sh",
-	}
-
 	for _, binary := range binaries {
 		if !isCommandAvailable(binary) {
 			log.Fatalf("Binary %s could not be found", binary)
@@ -90,6 +105,18 @@ func main() {
 		runCmdAndServe(c, cmd)
 	})
 
+	router.GET("/stations", func(c *gin.Context) {
+		stats := []string{}
+		for name := range stations {
+			stats = append(stats, name)
+		}
+		c.JSON(http.StatusOK, stats)
+	})
+
+	router.GET("/play/:station", func(c *gin.Context) {
+		// env VOLUME=35\% MUSIC_SOURCE=$BBC2 /usr/local/bin/radio.sh 2>&1
+	})
+
 	router.GET("/connected", func(c *gin.Context) {
 		cmd := exec.Command(binPath + "/connected.sh")
 		var stdout bytes.Buffer
@@ -100,11 +127,11 @@ func main() {
 		if err != nil {
 			errMsg := fmt.Sprint(err) + " - " + stderr.String()
 			log.Println(errMsg)
-			c.JSON(200, gin.H{"connected": false})
+			c.JSON(http.StatusOK, gin.H{"connected": false})
 			return
 		}
 		log.Println(stdout.String())
-		c.JSON(200, gin.H{"connected": true})
+		c.JSON(http.StatusOK, gin.H{"connected": true})
 	})
 
 	router.GET("/volume", func(c *gin.Context) {
@@ -127,7 +154,7 @@ func main() {
 			return
 		}
 		log.Println(volume)
-		c.JSON(200, gin.H{"volume": volume})
+		c.JSON(http.StatusOK, gin.H{"volume": volume})
 	})
 
 	router.PUT("/volume", func(c *gin.Context) {
@@ -156,7 +183,7 @@ func main() {
 			c.JSON(500, gin.H{"error": errMsg})
 			return
 		}
-		c.JSON(200, gin.H{})
+		c.JSON(http.StatusOK, gin.H{})
 	})
 
 	router.Run() // listen and serve on 0.0.0.0:PORT
