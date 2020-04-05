@@ -118,7 +118,7 @@ func (s session) getVolume() (v Volume, err error) {
 	cmd := filepath.Join(s.BinPath, "get_volume_t5.sh")
 	stdout, stderr, err := runCommand([]string{cmd}, nil)
 	if err != nil {
-		err = errors.Wrap(stderr)
+		err = errors.Wrap(err, stderr)
 		log.Printf("%+v", err)
 		return
 	}
@@ -151,6 +151,7 @@ func getStations(c *gin.Context) {
 }
 
 func (s session) playStation(c *gin.Context) {
+	// TODO set max trials to 1 or improve kill script!
 	station := c.Param("station")
 	url, ok := stations[station]
 	if !ok {
@@ -161,12 +162,23 @@ func (s session) playStation(c *gin.Context) {
 	cmd := filepath.Join(s.BinPath, "radio.sh")
 	env := map[string]string{}
 	env["MUSIC_SOURCE"] = url
-	_, stderr, err := runCommand([]string{cmd}, env)
+	currentVolume, err := s.getVolume()
 	if err != nil {
-		err = errors.Wrap(stderr)
 		errMsg := fmt.Sprintf("%+v", err)
 		log.Println(errMsg)
-		c.JSON(http.StatusOK, gin.H{"connected": false, "error": errMsg})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
+		return
+	} else {
+		if currentVolume.Value > 60 {
+			env["VOLUME"] = "45%"
+		}
+	}
+	_, stderr, err := runCommand([]string{cmd}, env)
+	if err != nil {
+		err = errors.Wrap(err, stderr)
+		errMsg := fmt.Sprintf("%+v", err)
+		log.Println(errMsg)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
 		return
 	}
 	c.Status(http.StatusNoContent)
@@ -176,7 +188,7 @@ func (s session) connectedHandler(c *gin.Context) {
 	cmd := filepath.Join(s.BinPath, "connected.sh")
 	_, stderr, err := runCommand([]string{cmd}, nil)
 	if err != nil {
-		err = errors.Wrap(stderr)
+		err = errors.Wrap(err, stderr)
 		errMsg := fmt.Sprintf("%+v", err)
 		log.Println(errMsg)
 		c.JSON(http.StatusOK, gin.H{"connected": false, "error": errMsg})
@@ -205,7 +217,7 @@ func (s session) ChangeVolume(amount int, louder bool) error {
 		fmt.Sprintf("%d%%%s", amount, sign)}
 	_, stderr, err := runCommand(cmd, nil)
 	if err != nil {
-		err = errors.Wrap(stderr)
+		err = errors.Wrap(err, stderr)
 	}
 	return err
 }
@@ -236,7 +248,7 @@ func (s session) mute(c *gin.Context) {
 	cmd := []string{filepath.Join(s.BinPath, "set_volume_t5.sh"), "toggle"}
 	_, stderr, err := runCommand(cmd, nil)
 	if err != nil {
-		errMsg := fmt.Sprintf("%+v", errors.Wrap(stderr))
+		errMsg := fmt.Sprintf("%+v", errors.Wrap(err, stderr))
 		log.Println(errMsg)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
 		return
