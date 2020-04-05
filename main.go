@@ -3,16 +3,59 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"github.com/gin-contrib/cors"
-	"github.com/gin-gonic/gin"
 	"log"
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/caarlos0/env"
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 )
+
+type Volume struct {
+	Value int `json:"volume"`
+}
+
+type session struct {
+	BinPath        string `env:"BIN_PATH" envDefault:"/usr/local/bin"`
+	SpeakerAddress string `env:"SPEAKER_ADDRESS" envDefault:"40:EF:4C:1D:37:F0"`
+}
+
+func initSession() (session, error) {
+	s := session{}
+	err := env.Parse(&s)
+	if err != nil {
+		return s, errors.WithStack(err)
+	}
+	macRegexp := "^([0-9A-Fa-f]{2}[:-]?){5}([0-9A-Fa-f]{2})$"
+	isMacAddress, err := regexp.MatchString(macRegexp, s.SpeakerAddress)
+	if err != nil {
+		return s, errors.WithStack(err)
+	} else if !isMacAddress {
+		return s, errors.WithStack(err)
+	}
+
+	for _, binary := range binaries {
+		if !s.isCommandAvailable(binary) {
+			log.Fatalf("Binary %s could not be found", binary)
+		}
+	}
+	return s, nil
+}
+
+func (s session) isCommandAvailable(name string) bool {
+	cmd := exec.Command("/bin/sh", "-c", "command -v "+name)
+	if err := cmd.Run(); err != nil {
+		return false
+	}
+	return true
+}
 
 var (
 	stations map[string]string
@@ -37,163 +80,191 @@ func init() {
 	stations["xmas"] = "http://live-bauerno.sharp-stream.com/station17_no_hq"
 }
 
-func isCommandAvailable(name string) bool {
-	cmd := exec.Command("/bin/sh", "-c", "command -v "+name)
-	if err := cmd.Run(); err != nil {
-		return false
-	}
-	return true
-}
-
-type Volume struct {
-	Value int `json:"volume"`
-}
-
-func runCmdAndServe(c *gin.Context, cmd *exec.Cmd) {
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
+func runCmdAndServe(c *gin.Context, cmd string, env map[string]string) {
+	stdout, stderr, err := runCommand([]string{cmd}, env)
 	if err != nil {
-		errMsg := fmt.Sprint(err) + " - " + stderr.String()
+		err = errors.Wrap(err, stderr)
+		errMsg := fmt.Sprintf("%+v", err)
 		log.Println(errMsg)
 		c.JSON(500, gin.H{"error": errMsg})
 	} else {
-		log.Println(stdout.String())
-		c.JSON(http.StatusOK, gin.H{"output": stdout.String()})
+		log.Println(stdout)
+		c.JSON(http.StatusOK, gin.H{"output": stdout})
 	}
 }
 
-func main() {
-	router := gin.Default()
-	router.Use(cors.Default())
-
-	// get speaker address
-	speaker := os.Getenv("SPEAKER_ADDRESS")
-	if speaker == "" {
-		speaker = "40:EF:4C:1D:37:F0"
+func makeEnvAssignments(env map[string]string) []string {
+	assignments := []string{}
+	for key, value := range env {
+		assignments = append(assignments, fmt.Sprintf("%s=%s", key, value))
 	}
-	macRegexp := "^([0-9A-Fa-f]{2}[:-]?){5}([0-9A-Fa-f]{2})$"
-	isMacAddress, err := regexp.MatchString(macRegexp, speaker)
+	return assignments
+}
+
+func runCommand(cmdArgs []string, env map[string]string) (stdout string, stderr string, err error) {
+	binary := cmdArgs[0]
+	cmd := exec.Command(binary, cmdArgs[1:]...)
+	var stdoutB bytes.Buffer
+	var stderrB bytes.Buffer
+	cmd.Stdout = &stdoutB
+	cmd.Stderr = &stderrB
+	envAssignments := makeEnvAssignments(env)
+	cmd.Env = append(os.Environ(), envAssignments...)
+	err = cmd.Run()
+	return stdoutB.String(), stderrB.String(), err
+}
+
+func (s session) getVolume() (v Volume, err error) {
+	cmd := filepath.Join(s.BinPath, "get_volume_t5.sh")
+	stdout, stderr, err := runCommand([]string{cmd}, nil)
 	if err != nil {
-		log.Fatalf("Failed to check SPEAKER_ADDRESS: %s for mac address", speaker)
-	} else if !isMacAddress {
-		log.Fatalf("SPEAKER_ADDRESS: %s did not parse as a mac address", speaker)
+		err = errors.Wrap(stderr)
+		log.Printf("%+v", err)
+		return
 	}
-	log.Println("Speaker: " + speaker)
-
-	binPath := os.Getenv("RWA_BIN_PATH")
-	if binPath == "" {
-		binPath = "/usr/local/bin"
+	volumeNumber, convErr := strconv.Atoi(strings.TrimSpace(stdout))
+	if convErr != nil {
+		err = errors.WithStack(convErr)
+		log.Printf("%+v", err)
+		return
 	}
+	v = Volume{Value: volumeNumber}
+	return
+}
 
-	// check for binaries
-	for _, binary := range binaries {
-		if !isCommandAvailable(binary) {
-			log.Fatalf("Binary %s could not be found", binary)
-		}
+func (s session) connect(c *gin.Context) {
+	cmd := filepath.Join(s.BinPath, "connect.sh")
+	runCmdAndServe(c, cmd, nil)
+}
+
+func (s session) killerHandler(c *gin.Context) {
+	cmd := filepath.Join(s.BinPath, "kill_radio.sh")
+	runCmdAndServe(c, cmd, nil)
+}
+
+func getStations(c *gin.Context) {
+	stats := []string{}
+	for name := range stations {
+		stats = append(stats, name)
 	}
+	c.JSON(http.StatusOK, stats)
+}
 
-	router.GET("/connect", func(c *gin.Context) {
-		cmd := exec.Command(binPath + "/connect.sh")
-		runCmdAndServe(c, cmd)
-	})
+func (s session) playStation(c *gin.Context) {
+	station := c.Param("station")
+	url, ok := stations[station]
+	if !ok {
+		errMsg := fmt.Sprintf("Do not have a station %s", station)
+		c.JSON(http.StatusBadRequest, gin.H{"error": errMsg})
+		return
+	}
+	cmd := filepath.Join(s.BinPath, "radio.sh")
+	env := map[string]string{}
+	env["MUSIC_SOURCE"] = url
+	_, stderr, err := runCommand([]string{cmd}, env)
+	if err != nil {
+		err = errors.Wrap(stderr)
+		errMsg := fmt.Sprintf("%+v", err)
+		log.Println(errMsg)
+		c.JSON(http.StatusOK, gin.H{"connected": false, "error": errMsg})
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
 
-	router.GET("/kill", func(c *gin.Context) {
-		cmd := exec.Command(binPath + "/kill_radio.sh")
-		runCmdAndServe(c, cmd)
-	})
+func (s session) connectedHandler(c *gin.Context) {
+	cmd := filepath.Join(s.BinPath, "connected.sh")
+	_, stderr, err := runCommand([]string{cmd}, nil)
+	if err != nil {
+		err = errors.Wrap(stderr)
+		errMsg := fmt.Sprintf("%+v", err)
+		log.Println(errMsg)
+		c.JSON(http.StatusOK, gin.H{"connected": false, "error": errMsg})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"connected": true})
+}
 
-	router.GET("/stations", func(c *gin.Context) {
-		stats := []string{}
-		for name := range stations {
-			stats = append(stats, name)
-		}
-		c.JSON(http.StatusOK, stats)
-	})
+func (s session) getVolumeHandler(c *gin.Context) {
+	volume, err := s.getVolume()
+	if err != nil {
+		errMsg := fmt.Sprintf("%+v", err)
+		log.Println(errMsg)
+		c.JSON(500, gin.H{"error": errMsg})
+		return
+	}
+	c.JSON(http.StatusOK, volume)
+}
 
-	router.GET("/play/:station", func(c *gin.Context) {
-		station := c.Param("station")
-		url, ok := stations[station]
-		if !ok {
-			errMsg := fmt.Sprintf("Do not have a station %s", station)
+func (s session) ChangeVolume(amount int, louder bool) error {
+	sign := "-"
+	if louder {
+		sign = "+"
+	}
+	cmd := []string{filepath.Join(s.BinPath, "set_volume_t5.sh"),
+		fmt.Sprintf("%d%%%s", amount, sign)}
+	_, stderr, err := runCommand(cmd, nil)
+	if err != nil {
+		err = errors.Wrap(stderr)
+	}
+	return err
+}
+
+func createVolumeChangerHandler(s session, louder bool) func(c *gin.Context) {
+	handler := func(c *gin.Context) {
+		amountString := c.Param("amount")
+		amount, err := strconv.Atoi(amountString)
+		if err != nil {
+			errMsg := fmt.Sprintf("%+v", errors.WithStack(err))
+			log.Println(errMsg)
 			c.JSON(http.StatusBadRequest, gin.H{"error": errMsg})
 			return
 		}
-		cmd := exec.Command(binPath + "/radio.sh")
-		cmd.Env = append(os.Environ(), "MUSIC_SOURCE="+url)
-		runCmdAndServe(c, cmd)
-	})
-
-	router.GET("/connected", func(c *gin.Context) {
-		cmd := exec.Command(binPath + "/connected.sh")
-		var stdout bytes.Buffer
-		var stderr bytes.Buffer
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
-		err := cmd.Run()
+		err = s.ChangeVolume(amount, louder)
 		if err != nil {
-			errMsg := fmt.Sprint(err) + " - " + stderr.String()
+			errMsg := fmt.Sprintf("%+v", err)
 			log.Println(errMsg)
-			c.JSON(http.StatusOK, gin.H{"connected": false})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
 			return
 		}
-		log.Println(stdout.String())
-		c.JSON(http.StatusOK, gin.H{"connected": true})
-	})
+		c.Status(http.StatusNoContent)
+	}
+	return handler
+}
 
-	router.GET("/volume", func(c *gin.Context) {
-		cmd := exec.Command(binPath + "/get_volume_t5.sh")
-		var stdout bytes.Buffer
-		var stderr bytes.Buffer
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
-		err := cmd.Run()
-		if err != nil {
-			errMsg := fmt.Sprint(err) + " - " + stderr.String()
-			log.Println(errMsg)
-			c.JSON(500, gin.H{"error": errMsg})
-			return
-		}
-		volume, convErr := strconv.Atoi(strings.TrimSpace(stdout.String()))
-		if convErr != nil {
-			log.Println(convErr)
-			c.JSON(500, gin.H{"error": convErr})
-			return
-		}
-		log.Println(volume)
-		c.JSON(http.StatusOK, gin.H{"volume": volume})
-	})
+func (s session) mute(c *gin.Context) {
+	cmd := []string{filepath.Join(s.BinPath, "set_volume_t5.sh"), "toggle"}
+	_, stderr, err := runCommand(cmd, nil)
+	if err != nil {
+		errMsg := fmt.Sprintf("%+v", errors.Wrap(stderr))
+		log.Println(errMsg)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
 
-	router.PUT("/volume", func(c *gin.Context) {
-		volume := new(Volume)
-		jsonErr := c.BindJSON(volume)
-		log.Println(volume)
-		if jsonErr != nil {
-			c.JSON(400, gin.H{"error": jsonErr})
-			return
-		}
-		if volume.Value < 0 || volume.Value > 100 {
-			c.JSON(400, gin.H{"error": "Volume should be an integer between" +
-				" 0 and 100", "data": volume})
-			return
-		}
-		cmd := exec.Command("set_volume_t5.sh",
-			strconv.Itoa(volume.Value)+"%")
-		var stdout bytes.Buffer
-		var stderr bytes.Buffer
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
-		err := cmd.Run()
-		if err != nil {
-			errMsg := fmt.Sprint(err) + " - " + stderr.String()
-			log.Println(errMsg)
-			c.JSON(500, gin.H{"error": errMsg})
-			return
-		}
-		c.JSON(http.StatusOK, gin.H{})
-	})
+func setupRouter(s session) *gin.Engine {
+	router := gin.Default()
+	router.Use(cors.Default())
 
+	router.GET("/connect", s.connect)
+	router.GET("/kill", s.killerHandler)
+	router.GET("/stations", getStations)
+	router.GET("/play/:station", s.playStation)
+	router.GET("/connected", s.connectedHandler)
+	router.GET("/volume", s.getVolumeHandler)
+	router.GET("/mute", s.mute)
+	router.GET("/louder/:amount", createVolumeChangerHandler(s, true))
+	router.GET("/quiet/:amount", createVolumeChangerHandler(s, false))
+	return router
+}
+
+func main() {
+	s, err := initSession()
+	if err != nil {
+		log.Fatalf("%+v", err)
+	}
+	router := setupRouter(s)
 	router.Run() // listen and serve on 0.0.0.0:PORT
 }
