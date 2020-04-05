@@ -6,7 +6,7 @@ set -u
 
 # TODO clean up output - send to /dev/null what we don't want to see
 # and echo what we would like to see
-export SPEAKER=${T5:-40:EF:4C:1D:37:F0}
+export SPEAKER_ADDRESS=${T5:-40:EF:4C:1D:37:F0}
 
 export trials=5
 
