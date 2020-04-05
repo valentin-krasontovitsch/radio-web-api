@@ -114,7 +114,16 @@ func main() {
 	})
 
 	router.GET("/play/:station", func(c *gin.Context) {
-		// env VOLUME=35\% MUSIC_SOURCE=$BBC2 /usr/local/bin/radio.sh 2>&1
+		station := c.Param("station")
+		url, ok := stations[station]
+		if !ok {
+			errMsg := fmt.Sprintf("Do not have a station %s", station)
+			c.JSON(http.StatusBadRequest, gin.H{"error": errMsg})
+			return
+		}
+		cmd := exec.Command(binPath + "/radio.sh")
+		cmd.Env = append(os.Environ(), "MUSIC_SOURCE="+url)
+		runCmdAndServe(c, cmd)
 	})
 
 	router.GET("/connected", func(c *gin.Context) {
