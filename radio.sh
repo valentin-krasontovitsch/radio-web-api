@@ -6,11 +6,13 @@ set -u
 
 # TODO clean up output - send to /dev/null what we don't want to see
 # and echo what we would like to see
-export SPEAKER_ADDRESS=${T5:-40:EF:4C:1D:37:F0}
+if [ -z "${SPEAKER_ADDRESS:-}" ]; then
+  export SPEAKER_ADDRESS="40:EF:4C:1D:37:F0"
+fi
 
 export trials=5
 
-/usr/local/bin/connect.sh
+/usr/local/bin/connect.sh >/dev/null
 
 device_check="$(amixer -D bluealsa 2>/dev/null)"
 
@@ -22,12 +24,12 @@ fi
 volume=${VOLUME:-40}
 
 amixer -D bluealsa sset 'Audio Pro T5 - A2DP' \
-  $volume 2>&1 >/dev/null
+  $volume &>/dev/null
 
 max_play_trials=5
 trial=1
 while true; do
-  mplayer -ao alsa:device=bluealsa $MUSIC_SOURCE 2>&1 >/dev/null || \
+  mplayer -ao alsa:device=bluealsa $MUSIC_SOURCE &>/dev/null || \
     echo Trial \# $trial: Failed to play!
   if [ $trial -eq $max_play_trials ]; then
     echo Reached limit of $max_play_trials failed play trials
