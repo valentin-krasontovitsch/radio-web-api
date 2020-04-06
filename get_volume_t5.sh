@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-CONTENTS=$(amixer -D bluealsa scontents)
+CONTENTS=$(amixer -D bluealsa scontents 2>/dev/null)
 if [ -z "$CONTENTS" ]; then
   echo Failed to acces bluealsa simple contents via amixer >&2
   echo Are you connected? >&2
