@@ -259,18 +259,18 @@ func (s session) mute(c *gin.Context) {
 
 func explainAPI(c *gin.Context) {
 	docstring := `radio web api endpoints
-  /connect - connect to the bluetooth speaker
-  /kill - kills players
-  /stations - returns list of available stations
-  /play/:station - starts playing station, expects one of names returned by
-    /stations endpoint
-  /connected - checks whether we are connected
-  /volume - get volume
-  /mute - mutes or unmutes the radio
-  /louder/:amount - increases volume by non-negative int amount
-  /quiet/:amount - decreases volume by non-negative int amount
-  /version - version of this deployment
-  / - this documentation
+  /connect         - connect to the bluetooth speaker
+  /kill            - kills players
+  /stations        - returns list of available stations
+  /play/:station   - starts playing station, expects one of names returned by
+                       /stations endpoint
+  /connected       - checks whether we are connected
+  /volume          - get volume
+  /mute            - mutes or unmutes the radio
+  /louder/:amount  - increases volume by non-negative int amount
+  /quiet/:amount   - decreases volume by non-negative int amount
+  /version         - version of this deployment
+  /                - returns this documentation
 `
 	c.String(http.StatusOK, docstring)
 }
