@@ -269,6 +269,7 @@ func explainAPI(c *gin.Context) {
   /mute - mutes or unmutes the radio
   /louder/:amount - increases volume by non-negative int amount
   /quiet/:amount - decreases volume by non-negative int amount
+  /version - version of this deployment
   / - this documentation
 `
 	c.String(http.StatusOK, docstring)
