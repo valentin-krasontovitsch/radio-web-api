@@ -290,7 +290,7 @@ func setupRouter(s session) *gin.Engine {
 	router.GET("/quiet/:amount", createVolumeChangerHandler(s, false))
 	router.GET("/", explainAPI)
 	router.GET("/version", func(c *gin.Context) {
-		c.String(http.StatusOK, version)
+		c.String(http.StatusOK, version+"\n")
 	})
 	return router
 }
