@@ -256,6 +256,23 @@ func (s session) mute(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+func explainAPI(c *gin.Context) {
+	docstring := `radio web api endpoints
+  /connect - connect to the bluetooth speaker
+  /kill - kills players
+  /stations - returns list of available stations
+  /play/:station - starts playing station, expects one of names returned by
+    /stations endpoint
+  /connected - checks whether we are connected
+  /volume - get volume
+  /mute - mutes or unmutes the radio
+  /louder/:amount - increases volume by non-negative int amount
+  /quiet/:amount - decreases volume by non-negative int amount
+  / - this documentation
+`
+	c.String(http.StatusOK, docstring)
+}
+
 func setupRouter(s session) *gin.Engine {
 	router := gin.Default()
 	router.Use(cors.Default())
@@ -269,6 +286,7 @@ func setupRouter(s session) *gin.Engine {
 	router.GET("/mute", s.mute)
 	router.GET("/louder/:amount", createVolumeChangerHandler(s, true))
 	router.GET("/quiet/:amount", createVolumeChangerHandler(s, false))
+	router.GET("/", explainAPI)
 	return router
 }
 
