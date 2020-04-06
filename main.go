@@ -67,6 +67,7 @@ func init() {
 	binaries = []string{
 		"connect.sh",
 		"connected.sh",
+		"muted.sh",
 		"set_volume_t5.sh",
 		"get_volume_t5.sh",
 		"kill_radio.sh",
@@ -257,19 +258,41 @@ func (s session) mute(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+func (s session) muted(c *gin.Context) {
+	cmd := []string{filepath.Join(s.BinPath, "muted.sh")}
+	stdout, stderr, err := runCommand(cmd, nil)
+	if err != nil {
+		errMsg := fmt.Sprintf("%+v", errors.Wrap(err, stderr))
+		log.Println(errMsg)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
+		return
+	}
+	if stdout == "true" {
+		c.JSON(http.StatusOK, gin.H{"muted": true})
+	} else if stdout == "false" {
+		c.JSON(http.StatusOK, gin.H{"muted": false})
+	} else {
+		err = errors.Errorf("Expected `true` or `false`, got `%s` instead", stdout)
+		errMsg := fmt.Sprintf("%+v", err)
+		log.Println(errMsg)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
+	}
+}
+
 func explainAPI(c *gin.Context) {
 	docstring := `radio web api endpoints
   /connect         - connect to the bluetooth speaker
   /kill            - kills players
-  /stations        - returns list of available stations
+  /stations        - list available stations. returns ` + "`[[STRING], [STRING], ...]`" + `
   /play/:station   - starts playing station, expects one of names returned by
                        /stations endpoint
-  /connected       - checks whether we are connected
-  /volume          - get volume
+  /connected       - checks whether we are connected. returns ` + "`{\"connected\": [BOOL]}`" + `
+  /volume          - get volume. returns ` + "`{\"volume\": [INT]}`" + `
   /mute            - mutes or unmutes the radio
+  /muted           - whether we are muted, or not. returns ` + "`{\"muted\": [BOOL]}`" + `
   /louder/:amount  - increases volume by non-negative int amount
   /quiet/:amount   - decreases volume by non-negative int amount
-  /version         - version of this deployment
+  /version         - version of this deployment. returns ` + "`{\"volume\": [STRING]}`" + `
   /                - returns this documentation
 `
 	c.String(http.StatusOK, docstring)
@@ -286,6 +309,7 @@ func setupRouter(s session) *gin.Engine {
 	router.GET("/connected", s.connectedHandler)
 	router.GET("/volume", s.getVolumeHandler)
 	router.GET("/mute", s.mute)
+	router.GET("/muted", s.muted)
 	router.GET("/louder/:amount", createVolumeChangerHandler(s, true))
 	router.GET("/quiet/:amount", createVolumeChangerHandler(s, false))
 	router.GET("/", explainAPI)
