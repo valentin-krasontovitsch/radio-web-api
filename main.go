@@ -60,6 +60,7 @@ func (s session) isCommandAvailable(name string) bool {
 var (
 	stations map[string]string
 	binaries []string
+	version  string
 )
 
 func init() {
@@ -287,6 +288,9 @@ func setupRouter(s session) *gin.Engine {
 	router.GET("/louder/:amount", createVolumeChangerHandler(s, true))
 	router.GET("/quiet/:amount", createVolumeChangerHandler(s, false))
 	router.GET("/", explainAPI)
+	router.GET("/version", func(c *gin.Context) {
+		c.String(http.StatusOK, version)
+	})
 	return router
 }
 
