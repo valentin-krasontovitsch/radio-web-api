@@ -116,6 +116,12 @@ func runCommand(cmdArgs []string, env map[string]string) (stdout string, stderr 
 	return stdoutB.String(), stderrB.String(), err
 }
 
+func handleError(c *gin.Context, status int, err error) {
+	errMsg := fmt.Sprintf("%+v", err)
+	log.Println(errMsg)
+	c.JSON(status, gin.H{"error": errMsg})
+}
+
 func (s session) getVolume() (v Volume, err error) {
 	cmd := filepath.Join(s.BinPath, "get_volume_t5.sh")
 	stdout, stderr, err := runCommand([]string{cmd}, nil)
@@ -301,6 +307,30 @@ func (s session) mutedHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"muted": muted})
 }
 
+func (s session) statusHandler(c *gin.Context) {
+	connected, err := s.connected()
+	if err != nil {
+		handleError(c, http.StatusInternalServerError, err)
+		return
+	}
+	if !connected {
+		c.JSON(http.StatusOK, gin.H{"connected": connected})
+		return
+	}
+	volume, err := s.getVolume()
+	if err != nil {
+		handleError(c, http.StatusInternalServerError, err)
+		return
+	}
+	muted, err := s.muted()
+	if err != nil {
+		handleError(c, http.StatusInternalServerError, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"connected": connected, "volume": volume,
+		"muted": muted})
+}
+
 func explainAPI(c *gin.Context) {
 	docstring := `radio web api endpoints
   /connect         - connect to the bluetooth speaker
@@ -315,6 +345,8 @@ func explainAPI(c *gin.Context) {
   /louder/:amount  - increases volume by non-negative int amount
   /quiet/:amount   - decreases volume by non-negative int amount
   /version         - version of this deployment. returns ` + "`{\"volume\": [STRING]}`" + `
+  /status          - returns  ` + "`{\"connected\": false}`" + ` if not connected, and
+                     ` + "`{\"connected\": true, \"volume\": [STRING], \"muted\": [BOOL]}`" + `
   /                - returns this documentation
 `
 	c.String(http.StatusOK, docstring)
@@ -334,6 +366,7 @@ func setupRouter(s session) *gin.Engine {
 	router.GET("/muted", s.mutedHandler)
 	router.GET("/louder/:amount", createVolumeChangerHandler(s, true))
 	router.GET("/quiet/:amount", createVolumeChangerHandler(s, false))
+	router.GET("/status", s.status)
 	router.GET("/", explainAPI)
 	router.GET("/version", func(c *gin.Context) {
 		c.String(http.StatusOK, version+"\n")
