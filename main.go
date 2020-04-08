@@ -258,25 +258,32 @@ func (s session) mute(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-func (s session) muted(c *gin.Context) {
+func (s session) muted() (bool, error) {
 	cmd := []string{filepath.Join(s.BinPath, "muted.sh")}
 	stdout, stderr, err := runCommand(cmd, nil)
 	if err != nil {
-		errMsg := fmt.Sprintf("%+v", errors.Wrap(err, stderr))
+		err = errors.Wrap(err, stderr)
+		return false, err
+	}
+	if stdout == "true" {
+		return true, nil
+	} else if stdout == "false" {
+		return false, nil
+	} else {
+		err = errors.Errorf("Expected `true` or `false`, got `%s` instead", stdout)
+		return false, err
+	}
+}
+
+func (s session) mutedHandler(c *gin.Context) {
+	muted, err := s.muted()
+	if err != nil {
+		errMsg := fmt.Sprintf("%+v", err)
 		log.Println(errMsg)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
 		return
 	}
-	if stdout == "true" {
-		c.JSON(http.StatusOK, gin.H{"muted": true})
-	} else if stdout == "false" {
-		c.JSON(http.StatusOK, gin.H{"muted": false})
-	} else {
-		err = errors.Errorf("Expected `true` or `false`, got `%s` instead", stdout)
-		errMsg := fmt.Sprintf("%+v", err)
-		log.Println(errMsg)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
-	}
+	c.JSON(http.StatusOK, gin.H{"muted": muted})
 }
 
 func explainAPI(c *gin.Context) {
@@ -309,7 +316,7 @@ func setupRouter(s session) *gin.Engine {
 	router.GET("/connected", s.connectedHandler)
 	router.GET("/volume", s.getVolumeHandler)
 	router.GET("/mute", s.mute)
-	router.GET("/muted", s.muted)
+	router.GET("/muted", s.mutedHandler)
 	router.GET("/louder/:amount", createVolumeChangerHandler(s, true))
 	router.GET("/quiet/:amount", createVolumeChangerHandler(s, false))
 	router.GET("/", explainAPI)
