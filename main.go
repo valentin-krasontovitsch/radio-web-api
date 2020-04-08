@@ -215,16 +215,12 @@ func (s session) connected() (connected bool, err error) {
 }
 
 func (s session) connectedHandler(c *gin.Context) {
-	cmd := filepath.Join(s.BinPath, "connected.sh")
-	_, stderr, err := runCommand([]string{cmd}, nil)
+	connected, err := s.connected()
 	if err != nil {
-		err = errors.Wrap(err, stderr)
-		errMsg := fmt.Sprintf("%+v", err)
-		log.Println(errMsg)
-		c.JSON(http.StatusOK, gin.H{"connected": false, "error": errMsg})
+		handleError(c, http.StatusInternalServerError, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"connected": true})
+	c.JSON(http.StatusOK, gin.H{"connected": connected})
 }
 
 func (s session) getVolumeHandler(c *gin.Context) {
