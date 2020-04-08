@@ -128,13 +128,11 @@ func (s session) getVolume() (v Volume, err error) {
 	stdout, stderr, err := runCommand([]string{cmd}, nil)
 	if err != nil {
 		err = errors.Wrap(err, stderr)
-		log.Printf("%+v", err)
 		return
 	}
 	volumeNumber, convErr := strconv.Atoi(strings.TrimSpace(stdout))
 	if convErr != nil {
 		err = errors.WithStack(convErr)
-		log.Printf("%+v", err)
 		return
 	}
 	v = Volume{Value: volumeNumber}
