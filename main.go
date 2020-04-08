@@ -113,7 +113,8 @@ func runCommand(cmdArgs []string, env map[string]string) (stdout string, stderr 
 	envAssignments := makeEnvAssignments(env)
 	cmd.Env = append(os.Environ(), envAssignments...)
 	err = cmd.Run()
-	return stdoutB.String(), stderrB.String(), err
+	cleanStdout := strings.TrimSpace(stdoutB.String())
+	return cleanStdout, stderrB.String(), err
 }
 
 func handleError(c *gin.Context, status int, err error) {
