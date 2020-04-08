@@ -186,6 +186,28 @@ func (s session) playStation(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+func evaluateStdout(stdout, truthy, falsy string) (bool, error) {
+	if stdout == truthy {
+		return true, nil
+	} else if stdout == falsy {
+		return false, nil
+	} else {
+		err := errors.Errorf("Expected `%s` or `%s`, got `%s` instead", truthy,
+			falsy, stdout)
+		return false, err
+	}
+}
+
+func (s session) connected() (connected bool, err error) {
+	cmd := filepath.Join(s.BinPath, "connected.sh")
+	stdout, stderr, err := runCommand([]string{cmd}, nil)
+	if err != nil {
+		err = errors.Wrap(err, stderr)
+		return
+	}
+	return evaluateStdout(stdout, "yes", "no")
+}
+
 func (s session) connectedHandler(c *gin.Context) {
 	cmd := filepath.Join(s.BinPath, "connected.sh")
 	_, stderr, err := runCommand([]string{cmd}, nil)
@@ -265,14 +287,7 @@ func (s session) muted() (bool, error) {
 		err = errors.Wrap(err, stderr)
 		return false, err
 	}
-	if stdout == "true" {
-		return true, nil
-	} else if stdout == "false" {
-		return false, nil
-	} else {
-		err = errors.Errorf("Expected `true` or `false`, got `%s` instead", stdout)
-		return false, err
-	}
+	return evaluateStdout(stdout, "true", "false")
 }
 
 func (s session) mutedHandler(c *gin.Context) {
