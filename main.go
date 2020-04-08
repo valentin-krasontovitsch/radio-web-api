@@ -366,7 +366,7 @@ func setupRouter(s session) *gin.Engine {
 	router.GET("/muted", s.mutedHandler)
 	router.GET("/louder/:amount", createVolumeChangerHandler(s, true))
 	router.GET("/quiet/:amount", createVolumeChangerHandler(s, false))
-	router.GET("/status", s.status)
+	router.GET("/status", s.statusHandler)
 	router.GET("/", explainAPI)
 	router.GET("/version", func(c *gin.Context) {
 		c.String(http.StatusOK, version+"\n")
