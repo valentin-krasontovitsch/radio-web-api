@@ -13,7 +13,7 @@ export SPEAKER_ADDRESS
 connected=$(connected.sh)
 
 if [ "$connected" = "yes" ]; then echo 'Already connected!' && exit 0;
-else errecho not connected; echo; fi
+else errecho not connected; errecho; fi
 
 CONN_MAX_TRY=${CONNECT_TRIALS:-1}
 
