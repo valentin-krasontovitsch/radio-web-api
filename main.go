@@ -66,6 +66,7 @@ var (
 func init() {
 	binaries = []string{
 		"connect.sh",
+		"disconnect.sh",
 		"connected.sh",
 		"muted.sh",
 		"set_volume_t5.sh",
@@ -141,6 +142,11 @@ func (s session) getVolume() (v Volume, err error) {
 
 func (s session) connect(c *gin.Context) {
 	cmd := filepath.Join(s.BinPath, "connect.sh")
+	runCmdAndServe(c, cmd, nil)
+}
+
+func (s session) disconnect(c *gin.Context) {
+	cmd := filepath.Join(s.BinPath, "disconnect.sh")
 	runCmdAndServe(c, cmd, nil)
 }
 
@@ -329,6 +335,7 @@ func (s session) statusHandler(c *gin.Context) {
 func explainAPI(c *gin.Context) {
 	docstring := `radio web api endpoints
   /connect         - connect to the bluetooth speaker
+  /disconnect      - disconnect the bluetooth speaker
   /kill            - kills players
   /stations        - list available stations. returns ` + "`[[STRING], [STRING], ...]`" + `
   /play/:station   - starts playing station, expects one of names returned by
@@ -352,6 +359,7 @@ func setupRouter(s session) *gin.Engine {
 	router.Use(cors.Default())
 
 	router.GET("/connect", s.connect)
+	router.GET("/disconnect", s.disconnect)
 	router.GET("/kill", s.killerHandler)
 	router.GET("/stations", getStations)
 	router.GET("/play/:station", s.playStation)
