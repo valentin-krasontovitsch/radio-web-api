@@ -10,7 +10,7 @@ fi
 export SPEAKER_ADDRESS
 connected=$(connected.sh)
 
-if [ "$connected" = "yes" ]; then echo 'Already connected!' && exit 0;
+if [ "$connected" = "yes" ]; then exit 0; fi
 
 CONN_MAX_TRY=${CONNECT_TRIALS:-1}
 
@@ -24,7 +24,6 @@ while true; do
     grep -e Connected | awk '{ print $2 }')
 
   if [ "$CONNECTED" == "yes" ]; then
-    echo 'Got connected!'
     exit 0
   else
     if [ $trial -eq $CONN_MAX_TRY ]; then
