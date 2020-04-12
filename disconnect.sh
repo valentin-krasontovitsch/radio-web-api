@@ -1,6 +1,4 @@
 #!/bin/bash
-# error if unbound variable used
-set -u
 
 if [ -z "$SPEAKER_ADDRESS" ]; then
   errecho "bluetooth speaker address not set!"

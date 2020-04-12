@@ -1,6 +1,4 @@
 #!/bin/bash
-# error if unbound variable used
-set -u
 
 errecho () { >&2 echo $@; }
 
