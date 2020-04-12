@@ -13,17 +13,11 @@ export SPEAKER_ADDRESS
 connected=$(connected.sh)
 
 if [ "$connected" = "yes" ]; then echo 'Already connected!' && exit 0;
-else errecho not connected; errecho; fi
 
 CONN_MAX_TRY=${CONNECT_TRIALS:-1}
 
-errecho "Will try to connext $CONN_MAX_TRY time(s)..."
-errecho
-
 trial=1
 while true; do
-  errecho Trial \# $trial
-  errecho Attempting to connect ...
   echo "connect $SPEAKER_ADDRESS" | bluetoothctl &>/dev/null
 
   sleep 4
@@ -32,11 +26,10 @@ while true; do
     grep -e Connected | awk '{ print $2 }')
 
   if [ "$CONNECTED" == "yes" ]; then
-    errecho We got connected!
-    break
+    echo 'Got connected!'
+    exit 0
   else
     if [ $trial -eq $CONN_MAX_TRY ]; then
-      errecho Reached limit of $CONN_MAX_TRY failed connection trials
       errecho Failed to connect... Push scan button on speaker?
       exit 1
     fi
