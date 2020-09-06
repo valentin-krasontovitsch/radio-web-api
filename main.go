@@ -23,8 +23,11 @@ type Volume struct {
 }
 
 type session struct {
-	BinPath        string `env:"BIN_PATH" envDefault:"/usr/local/bin"`
-	SpeakerAddress string `env:"SPEAKER_ADDRESS" envDefault:"40:EF:4C:1D:37:F0"`
+	BinPath        string   `env:"BIN_PATH" envDefault:"/usr/local/bin"`
+	SpeakerAddress string   `env:"SPEAKER_ADDRESS" envDefault:"40:EF:4C:1D:37:F0"`
+	Player         string   `env:"PLAYER" envDefault:"/usr/bin/mplayer"`
+	PlayerOptions  []string `env:"PLAYER_OPTIONS" envSeparator:"," envDefault:"-really-quiet"`
+	AudioControl   string   `env:"AUDIO_CONTROL" envDefault:"/usr/bin/amixer"`
 }
 
 func initSession() (session, error) {
@@ -49,6 +52,10 @@ func initSession() (session, error) {
 	return s, nil
 }
 
+func (s session) setVolumeCommand() []string {
+	return []string{s.AudioControl, "-q", "sset", "'Master'"}
+}
+
 func (s session) isCommandAvailable(name string) bool {
 	cmd := exec.Command("/bin/sh", "-c", "command -v "+name)
 	if err := cmd.Run(); err != nil {
@@ -59,20 +66,14 @@ func (s session) isCommandAvailable(name string) bool {
 
 var (
 	stations map[string]string
-	binaries []string
+	binaries map[string]string
 	version  string
 )
 
 func init() {
-	binaries = []string{
-		"connect.sh",
-		"disconnect.sh",
-		"connected.sh",
-		"muted.sh",
-		"set_volume_t5.sh",
-		"get_volume_t5.sh",
-		"kill_radio.sh",
-		"radio.sh",
+	binaries = map[string]string{
+		"connect":   "connect.sh",
+		"connected": "connected.sh",
 	}
 	stations = make(map[string]string)
 	stations["BBC2"] = "http://bbcmedia.ic.llnwd.net/stream/bbcmedia_radio2_mf_p"
@@ -83,17 +84,20 @@ func init() {
 	stations["xmas"] = "http://live-bauerno.sharp-stream.com/station17_no_hq"
 }
 
-func runCmdAndServe(c *gin.Context, cmd string, env map[string]string) {
-	stdout, stderr, err := runCommand([]string{cmd}, env)
+func runCmdAndServe(c *gin.Context, cmd []string, env map[string]string) {
+	stdout, _, err := runCommand(cmd, env)
 	if err != nil {
-		err = errors.Wrap(err, stderr)
 		errMsg := fmt.Sprintf("%+v", err)
 		log.Println(errMsg)
 		c.JSON(500, gin.H{"error": errMsg})
-	} else {
-		log.Println(stdout)
-		c.JSON(http.StatusOK, gin.H{"output": stdout})
+		return
 	}
+	if stdout == "" {
+		c.Status(http.StatusNoContent)
+		return
+	}
+	log.Println(stdout)
+	c.JSON(http.StatusOK, gin.H{"output": stdout})
 }
 
 func makeEnvAssignments(env map[string]string) []string {
@@ -115,6 +119,12 @@ func runCommand(cmdArgs []string, env map[string]string) (stdout string, stderr 
 	cmd.Env = append(os.Environ(), envAssignments...)
 	err = cmd.Run()
 	cleanStdout := strings.TrimSpace(stdoutB.String())
+	stderrString := stderrB.String()
+	if err != nil {
+		err = errors.Wrap(err, stderrString)
+		err = errors.WithMessage(err, cleanStdout)
+		err = errors.WithMessage(err, "Cmd run: "+strings.Join(cmdArgs, " "))
+	}
 	return cleanStdout, stderrB.String(), err
 }
 
@@ -124,34 +134,46 @@ func handleError(c *gin.Context, status int, err error) {
 	c.JSON(status, gin.H{"error": errMsg})
 }
 
+func parseVolume(stdout string) (int, error) {
+	log.Println(stdout)
+	lines := strings.Split(stdout, "\n")
+	lastLine := lines[len(lines)-1]
+	log.Println(lastLine)
+	volumeRegexp := regexp.MustCompile(`\[[0-9]+%\]`)
+	bracketedVolume := volumeRegexp.FindString(lastLine)
+	volumeString := strings.Trim(bracketedVolume, "[]%")
+	volume, convErr := strconv.Atoi(volumeString)
+	return volume, convErr
+}
+
 func (s session) getVolume() (v Volume, err error) {
-	cmd := filepath.Join(s.BinPath, "get_volume_t5.sh")
-	stdout, stderr, err := runCommand([]string{cmd}, nil)
+	cmd := []string{s.AudioControl, "sget", "'Master'"}
+	stdout, _, err := runCommand(cmd, nil)
 	if err != nil {
-		err = errors.Wrap(err, stderr)
 		return
 	}
-	volumeNumber, convErr := strconv.Atoi(strings.TrimSpace(stdout))
-	if convErr != nil {
-		err = errors.WithStack(convErr)
+	volume, err := parseVolume(stdout)
+	if err != nil {
+		err = errors.WithStack(err)
 		return
 	}
-	v = Volume{Value: volumeNumber}
+	v = Volume{Value: volume}
 	return
 }
 
 func (s session) connect(c *gin.Context) {
-	cmd := filepath.Join(s.BinPath, "connect.sh")
+	cmd := []string{filepath.Join(s.BinPath, binaries["connect"]),
+		s.SpeakerAddress}
 	runCmdAndServe(c, cmd, nil)
 }
 
 func (s session) disconnect(c *gin.Context) {
-	cmd := filepath.Join(s.BinPath, "disconnect.sh")
+	cmd := []string{"bluetoothctl", "disconnect", s.SpeakerAddress}
 	runCmdAndServe(c, cmd, nil)
 }
 
 func (s session) killerHandler(c *gin.Context) {
-	cmd := filepath.Join(s.BinPath, "kill_radio.sh")
+	cmd := []string{"killall", s.Player}
 	runCmdAndServe(c, cmd, nil)
 }
 
@@ -164,7 +186,6 @@ func getStations(c *gin.Context) {
 }
 
 func (s session) playStation(c *gin.Context) {
-	// TODO set max trials to 1 or improve kill script!
 	station := c.Param("station")
 	url, ok := stations[station]
 	if !ok {
@@ -172,23 +193,28 @@ func (s session) playStation(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": errMsg})
 		return
 	}
-	cmd := filepath.Join(s.BinPath, "radio.sh")
-	env := map[string]string{}
-	env["MUSIC_SOURCE"] = url
 	currentVolume, err := s.getVolume()
 	if err != nil {
 		errMsg := fmt.Sprintf("%+v", err)
 		log.Println(errMsg)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
 		return
-	} else {
-		if currentVolume.Value > 60 {
-			env["VOLUME"] = "45%"
+	}
+	if currentVolume.Value > 60 {
+		difference := currentVolume.Value - 45
+		err := s.ChangeVolume(difference, false)
+		if err != nil {
+			errMsg := fmt.Sprintf("%+v", err)
+			log.Println(errMsg)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
+			return
 		}
 	}
-	_, stderr, err := runCommand([]string{cmd}, env)
+	playArgs := append(s.PlayerOptions, url)
+	proc := exec.Command(s.Player, playArgs...)
+	err = proc.Start()
 	if err != nil {
-		err = errors.Wrap(err, stderr)
+		err = errors.WithStack(err)
 		errMsg := fmt.Sprintf("%+v", err)
 		log.Println(errMsg)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
@@ -210,13 +236,13 @@ func evaluateStdout(stdout, truthy, falsy string) (bool, error) {
 }
 
 func (s session) connected() (connected bool, err error) {
-	cmd := filepath.Join(s.BinPath, "connected.sh")
-	stdout, stderr, err := runCommand([]string{cmd}, nil)
-	if err != nil {
-		err = errors.Wrap(err, stderr)
+	cmd := []string{filepath.Join(s.BinPath, binaries["connected"]),
+		s.SpeakerAddress}
+	_, stderr, err := runCommand(cmd, nil)
+	if err != nil && stderr != "" {
 		return
 	}
-	return evaluateStdout(stdout, "yes", "no")
+	return err == nil, nil
 }
 
 func (s session) connectedHandler(c *gin.Context) {
@@ -244,12 +270,9 @@ func (s session) ChangeVolume(amount int, louder bool) error {
 	if louder {
 		sign = "+"
 	}
-	cmd := []string{filepath.Join(s.BinPath, "set_volume_t5.sh"),
-		fmt.Sprintf("%d%%%s", amount, sign)}
-	_, stderr, err := runCommand(cmd, nil)
-	if err != nil {
-		err = errors.Wrap(err, stderr)
-	}
+	cmd := append(s.setVolumeCommand(),
+		fmt.Sprintf("%d%%%s", amount, sign))
+	_, _, err := runCommand(cmd, nil)
 	return err
 }
 
@@ -276,10 +299,10 @@ func createVolumeChangerHandler(s session, louder bool) func(c *gin.Context) {
 }
 
 func (s session) mute(c *gin.Context) {
-	cmd := []string{filepath.Join(s.BinPath, "set_volume_t5.sh"), "toggle"}
-	_, stderr, err := runCommand(cmd, nil)
+	cmd := append(s.setVolumeCommand(), "toggle")
+	_, _, err := runCommand(cmd, nil)
 	if err != nil {
-		errMsg := fmt.Sprintf("%+v", errors.Wrap(err, stderr))
+		errMsg := fmt.Sprintf("%+v", err)
 		log.Println(errMsg)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
 		return
@@ -288,13 +311,17 @@ func (s session) mute(c *gin.Context) {
 }
 
 func (s session) muted() (bool, error) {
-	cmd := []string{filepath.Join(s.BinPath, "muted.sh")}
-	stdout, stderr, err := runCommand(cmd, nil)
+	cmd := []string{s.AudioControl, "sget", "'Master'"}
+	stdout, _, err := runCommand(cmd, nil)
 	if err != nil {
-		err = errors.Wrap(err, stderr)
 		return false, err
 	}
-	return evaluateStdout(stdout, "true", "false")
+	lines := strings.Split(stdout, "\n")
+	lastLine := lines[len(lines)-1]
+	re := regexp.MustCompile(`\[(on|off)\]`)
+	stateBrackets := re.FindString(lastLine)
+	state := strings.Trim(stateBrackets, "[]")
+	return evaluateStdout(state, "off", "on")
 }
 
 func (s session) mutedHandler(c *gin.Context) {
