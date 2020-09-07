@@ -173,8 +173,9 @@ func (s session) disconnect(c *gin.Context) {
 }
 
 func (s session) killerHandler(c *gin.Context) {
-	cmd := []string{"killall", s.Player}
-	runCmdAndServe(c, cmd, nil)
+	killIt := []string{"killall", "-q", s.Player}
+	runCommand(killIt, nil)
+	c.Status(http.StatusNoContent)
 }
 
 func getStations(c *gin.Context) {
