@@ -221,6 +221,14 @@ func (s session) playStation(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
 		return
 	}
+	err = proc.Process.Release()
+	if err != nil {
+		err = errors.WithStack(err)
+		errMsg := fmt.Sprintf("%+v", err)
+		log.Println(errMsg)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
+		return
+	}
 	c.Status(http.StatusNoContent)
 }
 
