@@ -211,6 +211,22 @@ func (s session) playStation(c *gin.Context) {
 			return
 		}
 	}
+	muted, err := s.muted()
+	if err != nil {
+		errMsg := fmt.Sprintf("%+v", err)
+		log.Println(errMsg)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
+		return
+	}
+	if muted {
+		err := s.toggleMute()
+		if err != nil {
+			errMsg := fmt.Sprintf("%+v", err)
+			log.Println(errMsg)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": errMsg})
+			return
+		}
+	}
 	playArgs := append(s.PlayerOptions, url)
 	proc := exec.Command(s.Player, playArgs...)
 	err = proc.Start()
