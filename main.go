@@ -307,9 +307,14 @@ func createVolumeChangerHandler(s session, louder bool) func(c *gin.Context) {
 	return handler
 }
 
-func (s session) mute(c *gin.Context) {
+func (s session) toggleMute() error {
 	cmd := append(s.setVolumeCommand(), "toggle")
 	_, _, err := runCommand(cmd, nil)
+	return err
+}
+
+func (s session) toggleMuteHandler(c *gin.Context) {
+	err := s.toggleMute()
 	if err != nil {
 		errMsg := fmt.Sprintf("%+v", err)
 		log.Println(errMsg)
@@ -401,7 +406,7 @@ func setupRouter(s session) *gin.Engine {
 	router.GET("/play/:station", s.playStation)
 	router.GET("/connected", s.connectedHandler)
 	router.GET("/volume", s.getVolumeHandler)
-	router.GET("/mute", s.mute)
+	router.GET("/mute", s.toggleMuteHandler)
 	router.GET("/muted", s.mutedHandler)
 	router.GET("/louder/:amount", createVolumeChangerHandler(s, true))
 	router.GET("/quiet/:amount", createVolumeChangerHandler(s, false))
