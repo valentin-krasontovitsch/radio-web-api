@@ -49,6 +49,7 @@ func initSession() (session, error) {
 			log.Fatalf("Binary %s could not be found", binary)
 		}
 	}
+	log.Printf("initialized session: %+v\n", s)
 	return s, nil
 }
 
