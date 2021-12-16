@@ -28,6 +28,7 @@ type session struct {
 	Player         string   `env:"PLAYER" envDefault:"/usr/bin/mplayer"`
 	PlayerOptions  []string `env:"PLAYER_OPTIONS" envSeparator:"," envDefault:"-really-quiet"`
 	AudioControl   string   `env:"AUDIO_CONTROL" envDefault:"/usr/bin/amixer"`
+	LocalAudioPath string   `env:"LOCAL_AUDIO_PATH" envDefault:"/var/audio/"`
 }
 
 func initSession() (session, error) {
@@ -49,7 +50,22 @@ func initSession() (session, error) {
 			log.Fatalf("Binary %s could not be found", binary)
 		}
 	}
-	return s, nil
+	err = s.setupLocalAudio()
+	return s, err
+}
+
+func (s session) setupLocalAudio() (err error) {
+	localAudioFiles := map[string]string{}
+	localAudioFiles["nature-noise"] = "nature-mix.ogg"
+	for name, filename := range localAudioFiles {
+		location := filepath.Join(s.LocalAudioPath, filename)
+		_, err = os.Stat(location)
+		if os.IsNotExist(err) {
+			return errors.WithStack(err)
+		}
+		stations[name] = location
+	}
+	return
 }
 
 func (s session) setVolumeCommand() []string {
@@ -75,6 +91,10 @@ func init() {
 		"connect":   "connect.sh",
 		"connected": "connected.sh",
 	}
+	setupStations()
+}
+
+func setupStations() {
 	stations = make(map[string]string)
 	stations["BBC2"] = "http://bbcmedia.ic.llnwd.net/stream/bbcmedia_radio2_mf_p"
 	stations["WDR2"] = "https://wdr-wdr2-rheinruhr.sslcast.addradio.de/wdr/wdr2/rheinruhr/mp3/128/stream.mp3"

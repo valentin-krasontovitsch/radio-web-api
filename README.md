@@ -25,7 +25,8 @@ put error messages in a field with key `error`.
 ## Configuration
 
 - `PORT` which port the web api will listen on
-* `SPEAKER_ADDRESS` MAC address of speaker
+- `SPEAKER_ADDRESS` MAC address of speaker
+- `LOCAL_AUDIO_PATH` directory containing local audio files
 
 ## Implementation
 
