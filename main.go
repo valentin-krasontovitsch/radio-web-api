@@ -194,7 +194,19 @@ func (s session) disconnect(c *gin.Context) {
 
 func (s session) killerHandler(c *gin.Context) {
 	cmd := []string{"killall", s.Player}
-	runCmdAndServe(c, cmd, nil)
+	stdout, _, err := runCommand(cmd, nil)
+	if err != nil && !strings.Contains(err.Error(), "no process found") {
+		errMsg := fmt.Sprintf("%+v", err)
+		log.Println(errMsg)
+		c.JSON(500, gin.H{"error": errMsg})
+		return
+	}
+	if stdout == "" {
+		c.Status(http.StatusNoContent)
+		return
+	}
+	log.Println(stdout)
+	c.JSON(http.StatusOK, gin.H{"output": stdout})
 }
 
 func getStations(c *gin.Context) {
