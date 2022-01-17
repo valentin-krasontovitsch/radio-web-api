@@ -56,7 +56,7 @@ func initSession() (session, error) {
 
 func (s session) setupLocalAudio() (err error) {
 	localAudioFiles := map[string]string{}
-	localAudioFiles["nature-noise"] = "nature-mix.ogg"
+	localAudioFiles["rain-storm"] = "rain-storm.m4a"
 	for name, filename := range localAudioFiles {
 		location := filepath.Join(s.LocalAudioPath, filename)
 		_, err = os.Stat(location)
