@@ -96,7 +96,7 @@ func init() {
 
 func setupStations() {
 	stations = make(map[string]string)
-	stations["BBC2"] = "http://stream.live.vc.bbcmedia.co.uk/bbc_radio_two"
+	stations["BBC2"] = "http://a.files.bbci.co.uk/media/live/manifesto/audio/simulcast/dash/nonuk/dash_low/ak/bbc_radio_two.mpd"
 	stations["WDR2"] = "https://wdr-wdr2-rheinruhr.sslcast.addradio.de/wdr/wdr2/rheinruhr/mp3/128/stream.mp3"
 	stations["NRK-P1"] = "http://lyd.nrk.no/nrk_radio_p1_hordaland_mp3_h"
 	stations["NRK-P3"] = "http://lyd.nrk.no/nrk_radio_p3_mp3_h"
